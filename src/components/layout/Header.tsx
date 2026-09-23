@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { 
   Search, 
@@ -13,25 +13,57 @@ import {
   Settings,
   LogOut,
   LogIn,
-  UserPlus
+  UserPlus,
+  Shield
 } from "lucide-react";
 import { useLocationStore } from "@/store/useLocationStore";
 import { supabase } from "@/lib/supabase";
+import { cn } from "@/lib/utils";
 
 export function Header() {
   const { currentCity, isLoading } = useLocationStore();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [session, setSession] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      if (session?.user) {
+        supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single()
+          .then(({ data }) => {
+            const loginMode = typeof window !== 'undefined' ? sessionStorage.getItem("citynest_login_mode") : "user";
+            if (data?.role === 'admin' && loginMode === 'admin') setIsAdmin(true);
+          });
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      if (session?.user) {
+        supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single()
+          .then(({ data }) => {
+            const loginMode = typeof window !== 'undefined' ? sessionStorage.getItem("citynest_login_mode") : "user";
+            if (data?.role === 'admin' && loginMode === 'admin') {
+              setIsAdmin(true);
+            } else {
+              setIsAdmin(false);
+            }
+          });
+      } else {
+        setIsAdmin(false);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -60,9 +92,14 @@ export function Header() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    sessionStorage.removeItem("citynest_login_mode");
     setIsDropdownOpen(false);
     router.push("/");
   };
+
+  if (pathname.startsWith('/admin')) {
+    return null;
+  }
 
   return (
     <header className="h-20 bg-[#09090b]/80 backdrop-blur-md border-b border-[#27272a] sticky top-0 z-50 flex items-center justify-between px-8">
@@ -121,7 +158,13 @@ export function Header() {
                     <Star className="w-4 h-4" />
                     Favorites
                   </Link>
-                  <Link href="/settings" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-smooth">
+                  {isAdmin && (
+                    <Link href="/admin" onClick={() => setIsDropdownOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-blue-400 hover:text-blue-300 hover:bg-zinc-800 transition-smooth border-t border-zinc-800 mt-1 pt-3">
+                      <Shield className="w-4 h-4" />
+                      Admin Portal
+                    </Link>
+                  )}
+                  <Link href="/settings" onClick={() => setIsDropdownOpen(false)} className={cn("flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 transition-smooth", !isAdmin && "border-t border-zinc-800 mt-1 pt-3")}>
                     <Settings className="w-4 h-4" />
                     Settings
                   </Link>

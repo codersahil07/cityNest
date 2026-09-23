@@ -1,11 +1,12 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { 
   Home, Compass, MapPin, Building2, ShoppingBag, 
-  Dumbbell, Star, PlusSquare, Settings, User, LogOut 
+  Dumbbell, Star, PlusSquare, Settings, User, LogOut, Shield 
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -31,9 +32,49 @@ const bottomNavItems = [
 export function Sidebar({ className }: { className?: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single()
+          .then(({ data }) => {
+            const loginMode = typeof window !== 'undefined' ? sessionStorage.getItem("citynest_login_mode") : "user";
+            if (data?.role === 'admin' && loginMode === 'admin') setIsAdmin(true);
+          });
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", session.user.id)
+          .single()
+          .then(({ data }) => {
+            const loginMode = typeof window !== 'undefined' ? sessionStorage.getItem("citynest_login_mode") : "user";
+            setIsAdmin(data?.role === 'admin' && loginMode === 'admin');
+          });
+      } else {
+        setIsAdmin(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (pathname.startsWith('/admin')) {
+    return null;
+  }
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    sessionStorage.removeItem("citynest_login_mode");
     router.push("/");
   };
 
@@ -101,6 +142,18 @@ export function Sidebar({ className }: { className?: string }) {
               {item.label}
             </Link>
           ))}
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className={cn(
+                "flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium transition-smooth hover:bg-zinc-800 hover:text-blue-300",
+                pathname.startsWith("/admin") ? "bg-blue-500/10 text-blue-500" : "text-blue-400"
+              )}
+            >
+              <Shield className="w-4 h-4" />
+              Admin Portal
+            </Link>
+          )}
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium text-zinc-400 transition-smooth hover:bg-zinc-800 hover:text-red-400"
